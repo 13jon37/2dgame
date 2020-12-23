@@ -1,0 +1,6 @@
+.vs/
+binDebug-x64/
+bin-intDebug-x64/
+
+# Files
+*.user
