@@ -1,3 +1,5 @@
+![Screenshot](game.PNG)
+
 * BIG thanks to Casey Muratori (Handmade Hero) - (https://handmadehero.org/) &
 * Ryan Ries on YouTube!!!!
 * The following code originates from both Casey Muratori's and Ryan Ries' YouTube video series. 
