@@ -700,8 +700,23 @@ initalize_player(void)
 	g_player.x = 25;
 	g_player.y = 25;
 
-	if ((error = load_32_bitpp_bitmap_from_file("E:\\coding\\nivr\\dev\\VSProjects\\win32_game\\Assets\\Hero_Suit0_Down_Standing.bmpx",
-		&g_player.sprite[SUIT_0][FACING_DOWN_0])) != ERROR_SUCCESS)
+	if ((error = load_32_bitpp_bitmap_from_file(".\\Assets\\soldier_standing.bmpx", &g_player.sprite[SUIT_0][FACING_DOWN_0])) != ERROR_SUCCESS)
+	{
+		MessageBoxA(NULL, "Failed to load bitmap!", "Error!",
+			MB_ICONEXCLAMATION | MB_OK);
+
+		goto Exit;
+	}
+
+	if ((error = load_32_bitpp_bitmap_from_file(".\\Assets\\soldier_walking_0.bmpx", &g_player.sprite[SUIT_1][FACING_DOWN_1])) != ERROR_SUCCESS)
+	{
+		MessageBoxA(NULL, "Failed to load bitmap!", "Error!",
+			MB_ICONEXCLAMATION | MB_OK);
+
+		goto Exit;
+	}
+
+	if ((error = load_32_bitpp_bitmap_from_file(".\\Assets\\soldier_walking_1.bmpx", &g_player.sprite[SUIT_2][FACING_DOWN_0])) != ERROR_SUCCESS)
 	{
 		MessageBoxA(NULL, "Failed to load bitmap!", "Error!",
 			MB_ICONEXCLAMATION | MB_OK);
