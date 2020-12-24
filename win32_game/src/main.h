@@ -8,7 +8,7 @@
 #define GAME_DRAWING_AREA_MEMORY_SIZE ((GAME_RES_WIDTH * GAME_RES_HEIGHT) * (GAME_BPP / 8))
 
 // 16.67 milliseconds is 60 frames per second.
-#define TARGET_MICROSECONDS_PER_FRAME		16667ULL
+#define TARGET_MICROSECONDS_PER_FRAME 16667ULL
 
 #define SIMD
 
@@ -24,6 +24,36 @@
 
 // Disable pixel32_t* cast warning
 #pragma warning(disable: 4133)
+
+#define SUIT_0 0
+
+#define SUIT_1 1
+
+#define SUIT_2 2
+
+#define FACING_DOWN_0	0
+
+#define FACING_DOWN_1	1
+
+#define FACING_DOWN_2	2
+
+#define FACING_LEFT_0	3
+
+#define FACING_LEFT_1	4
+
+#define FACING_LEFT_2	5
+
+#define FACING_RIGHT_0	6
+
+#define FACING_RIGHT_1	7
+
+#define FACING_RIGHT_2	8
+
+#define FACING_UP_0		9
+
+#define FACING_UP_1		10
+
+#define FACING_UP_2		11
 
 typedef LONG(NTAPI* _NtTimerResolution) (OUT PULONG MinimalResolution, OUT PULONG MaximumResolution, OUT PULONG CurrentResolution);
 typedef	NTSYSAPI NTSTATUS (NTAPI* _NtSetTimerResolution) (IN ULONG DesiredResolution, IN BOOLEAN SetResolution, OUT PULONG CurrentResolution);
@@ -69,6 +99,7 @@ typedef struct PERFORMANCE_DATA_STRUCT {
 
 typedef struct PLAYER_STRUCT {
 	char name[12];
+	game_bitmap_t sprite[3][12];
 	i32 x, y;
 	i32 health;
 } player_t;
@@ -87,6 +118,15 @@ process_player_input(void);
 
 internal void
 render_frame_graphics(void);
+
+internal DWORD 
+load_32_bitpp_bitmap_from_file(_In_ char* file_name, _Inout_ game_bitmap_t* game_bit_map);
+
+internal DWORD
+initalize_player(void);
+
+internal void
+blit_32bpp_bitmap_to_buffer(_In_ game_bitmap_t* game_bit_map, _In_ u16 x, _In_ u16 y);
 
 #ifdef SIMD
 __forceinline

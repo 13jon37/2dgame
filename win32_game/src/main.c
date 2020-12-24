@@ -18,6 +18,27 @@ global_variable game_bitmap_t g_back_buffer;
 global_variable performance_data_t g_performance_data;
 
 global_variable player_t g_player;
+global_variable  BOOL g_window_has_focus;
+
+global_variable i64 g_perf_counter_frequency;
+
+inline LARGE_INTEGER 
+get_wall_clock(void)
+{
+	LARGE_INTEGER result;
+	QueryPerformanceCounter(&result);
+
+	return result;
+}
+
+inline f32
+get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end)
+{
+	f32 result = ((f32)end.QuadPart - start.QuadPart) /
+		((f32)g_perf_counter_frequency);
+
+	return result;
+}
 
 int CALLBACK WinMain(
 	_In_	 HINSTANCE instance,
@@ -28,11 +49,15 @@ int CALLBACK WinMain(
 	UNREFERENCED_PARAMETER(instance);
 	UNREFERENCED_PARAMETER(previous_instance);
 	UNREFERENCED_PARAMETER(command_line);
-	UNREFERENCED_PARAMETER(cmd_show);
+
+	HANDLE process_handle = GetCurrentProcess();
 
 	LARGE_INTEGER perf_counter_frequency_result = { 0 };
 	QueryPerformanceFrequency(&perf_counter_frequency_result);
-	i64 perf_counter_frequency = perf_counter_frequency_result.QuadPart;
+	g_perf_counter_frequency = perf_counter_frequency_result.QuadPart;
+
+	i32 game_update_hz = 60;
+	f32 target_seconds_elapsed_per_frame = 1.0f / (f32)game_update_hz;
 
 	HMODULE nt_dll_handle = 0;
 
@@ -47,7 +72,7 @@ int CALLBACK WinMain(
 	if ((NtQueryTimerResolution = 
 		(_NtTimerResolution)GetProcAddress(nt_dll_handle, "NtQueryTimerResolution")) == NULL)
 	{
-		MessageBoxA(NULL, "Could not find ntdll.dll function!", "Error!",
+		MessageBoxA(NULL, "Could not find NtQueryTimerResolution ntdll.dll function!", "Error!",
 			MB_ICONEXCLAMATION | MB_OK);
 
 		goto Exit;
@@ -60,7 +85,7 @@ int CALLBACK WinMain(
 	if ((NtSetTimerResolution =
 		(_NtSetTimerResolution)GetProcAddress(nt_dll_handle, "NtSetTimerResolution")) == NULL)
 	{
-		MessageBoxA(NULL, "Could not find ntdll.dll function!", "Error!",
+		MessageBoxA(NULL, "Could not find NtSetTimerResolution ntdll.dll function!", "Error!",
 			MB_ICONEXCLAMATION | MB_OK);
 
 		goto Exit;
@@ -69,8 +94,24 @@ int CALLBACK WinMain(
 	// Set Timer Res to 1.00
 	NtSetTimerResolution(10000, TRUE, &g_performance_data.current_timer_resolution);
 
-	GetSystemInfo(&g_performance_data.system_info);
+	if (SetPriorityClass(process_handle, HIGH_PRIORITY_CLASS) == 0)
+	{
+		MessageBoxA(NULL, "Could not set priority!", "Error!",
+			MB_ICONEXCLAMATION | MB_OK);
 
+		goto Exit;
+	}
+
+	if (SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) == 0)
+	{
+		MessageBoxA(NULL, "Could not set thread priority!", "Error!",
+			MB_ICONEXCLAMATION | MB_OK);
+
+		goto Exit;
+	}
+
+	GetSystemInfo(&g_performance_data.system_info);
+	
 	if (game_is_running() == TRUE)
 	{
 		MessageBoxA(NULL, "Another instance of this program is already running!", "Error!",
@@ -83,6 +124,9 @@ int CALLBACK WinMain(
 	{
 		goto Exit;
 	}
+
+	// For some reason the window doesn't always show, so show manually
+	ShowWindow(g_game_window, cmd_show);
 
 	// If there is already memory allocated already, free it
 	if (g_back_buffer.memory)
@@ -105,23 +149,54 @@ int CALLBACK WinMain(
 		goto Exit;
 	}
 
-	g_player.x = 25;
-	g_player.y = 25;
+	if (initalize_player() != ERROR_SUCCESS)
+	{
+		MessageBoxA(NULL, "Failed to initialize player!", "Error!",
+			MB_ICONEXCLAMATION | MB_OK);
+
+		goto Exit;
+	}
+
+
+	LARGE_INTEGER last_counter = { 0 };// = get_wall_clock();
+	QueryPerformanceFrequency(&last_counter);
+	i64 last_cycle_count = __rdtsc();
 
 	g_game_is_running = TRUE;
-
-	LARGE_INTEGER last_counter;
-	QueryPerformanceCounter(&last_counter);
-
-	i64 last_cycle_count = __rdtsc();
 
 	while (g_game_is_running)
 	{
 		MSG message = { 0 };
 		// Message loop
-		if (PeekMessageA(&message, g_game_window, 0, 0, PM_REMOVE))
+		if (PeekMessageA(&message, 0, 0, 0, PM_REMOVE))
 		{
 			DispatchMessageA(&message);
+		}
+
+		/* Calculate fps -- THANKS HANDMADE HERO, I WATCHED DONT REALLY UNDERSTAND THO */
+
+		i64 end_cycle_count = __rdtsc();
+		i64 cycles_elapsed = end_cycle_count - last_cycle_count;
+
+		LARGE_INTEGER work_counter = get_wall_clock();
+
+		f32 work_seconds_elapsed = get_seconds_elapsed(last_counter, work_counter);
+		i64 counter_elapsed = work_counter.QuadPart - last_counter.QuadPart;
+		f32 seconds_elapsed_for_frame = work_seconds_elapsed;
+		
+		if (seconds_elapsed_for_frame < target_seconds_elapsed_per_frame)
+		{
+			while (seconds_elapsed_for_frame < target_seconds_elapsed_per_frame)
+			{
+				DWORD sleep_ms = (DWORD)(1000.f * (target_seconds_elapsed_per_frame - seconds_elapsed_for_frame));
+				Sleep(sleep_ms);
+				seconds_elapsed_for_frame = get_seconds_elapsed(last_counter, get_wall_clock());
+			}
+		}
+		else
+		{
+			// Missed update rate
+			// Log
 		}
 
 		/* Main Game Loop */
@@ -130,32 +205,26 @@ int CALLBACK WinMain(
 
 		render_frame_graphics();
 
-		/* Calculate fps -- THANKS HANDMADE HERO, I WATCHED DONT REALLY UNDERSTAND THO */
 
-		LARGE_INTEGER end_counter;
-		QueryPerformanceCounter(&end_counter);
 
-		i64 end_cycle_count = __rdtsc();
+		i32 ms_per_frame = (i32)((1000 * counter_elapsed) / g_perf_counter_frequency);
 
-		i64 cycles_elapsed = end_cycle_count - last_cycle_count;
-		i64 counter_elapsed = end_counter.QuadPart - last_counter.QuadPart;
-		i32 ms_per_frame = (i32)((1000 * counter_elapsed) / perf_counter_frequency);
-		g_performance_data.fps = (i32)(perf_counter_frequency / counter_elapsed);
+		g_performance_data.fps = (i32)(g_perf_counter_frequency / counter_elapsed);
 		g_performance_data.mcpf = (i32)(cycles_elapsed / (1000 * 1000));
 
 		// Every Two Frames Do these things
 		if ((g_performance_data.total_frames_rendered % 120) == 0)
 		{
+			GetSystemTimeAsFileTime((FILETIME*)&g_performance_data.current_system_time);
+
 			// Get Handle Count
-			GetProcessHandleCount(GetCurrentProcess(), &g_performance_data.handle_count);
+			GetProcessHandleCount(process_handle, &g_performance_data.handle_count);
 
 			// Get Memory Usage
-			K32GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&g_performance_data.mem_info, sizeof(g_performance_data.mem_info));
-
-			GetSystemTimeAsFileTime(&g_performance_data.current_system_time);
+			K32GetProcessMemoryInfo(process_handle, (PROCESS_MEMORY_COUNTERS*)&g_performance_data.mem_info, sizeof(g_performance_data.mem_info));
 
 			// Get CPU Usage
-			GetProcessTimes(GetCurrentProcess(),
+			GetProcessTimes(process_handle,
 				&g_performance_data.process_creation_time,
 				&g_performance_data.process_exit_time,
 				(FILETIME*)&g_performance_data.current_kernel_cpu_time,
@@ -165,6 +234,7 @@ int CALLBACK WinMain(
 				(double)((g_performance_data.current_kernel_cpu_time - g_performance_data.previous_kernel_cpu_time)
 					+ (g_performance_data.current_user_cpu_time - g_performance_data.previous_user_cpu_time));
 
+
 			g_performance_data.cpu_percent /= (g_performance_data.current_system_time - g_performance_data.previous_system_time);
 
 			g_performance_data.cpu_percent /= g_performance_data.system_info.dwNumberOfProcessors;
@@ -172,15 +242,6 @@ int CALLBACK WinMain(
 			g_performance_data.cpu_percent *= 100;
 		}
 
-			// Jank way to limit my fps, idk tbh
-		if (g_performance_data.mcpf <= TARGET_MICROSECONDS_PER_FRAME)
-		{
-			if (g_performance_data.mcpf <= (TARGET_MICROSECONDS_PER_FRAME - (g_performance_data.current_timer_resolution * .001f)))
-				Sleep(1);
-
-			g_performance_data.mcpf = TARGET_MICROSECONDS_PER_FRAME;
-		}
-		
 		g_performance_data.total_frames_rendered++;
 
 		char buffer[256] = { 0 };
@@ -192,7 +253,11 @@ int CALLBACK WinMain(
 		g_performance_data.previous_user_cpu_time = g_performance_data.current_user_cpu_time;
 		g_performance_data.previous_system_time = g_performance_data.current_system_time;
 
+		LARGE_INTEGER end_counter = get_wall_clock();
 		last_counter = end_counter;
+
+		end_cycle_count = __rdtsc();
+		cycles_elapsed = end_cycle_count - last_cycle_count;
 		last_cycle_count = end_cycle_count;	
 	}
 
@@ -223,6 +288,23 @@ CALLBACK main_window_proc(
 
 		case WM_SIZE: {
 			// Set the size and position of the window. 
+		} break;
+
+		case WM_ACTIVATEAPP: {
+
+			if (w_param == 0)
+			{
+				// Our window has lost focus
+				g_window_has_focus = FALSE;
+			}
+			else
+			{
+				// Our window has gained focus
+				ShowCursor(FALSE);
+				g_window_has_focus = TRUE;
+			}
+
+			ShowCursor(FALSE);
 		} break;
 
 		case WM_DESTROY: {
@@ -323,7 +405,7 @@ create_main_game_window(void)
 	}
 
 	if (SetWindowPos(g_game_window, 
-		HWND_TOPMOST,
+		HWND_TOP,
 		g_performance_data.monitor_info.rcMonitor.left,
 		g_performance_data.monitor_info.rcMonitor.top, 
 		g_performance_data.monitor_width,
@@ -361,6 +443,9 @@ game_is_running(void)
 internal void 
 process_player_input(void)
 {
+	if (g_window_has_focus == FALSE)
+		return;
+
 	i16 escape_key_is_down = GetAsyncKeyState(VK_ESCAPE);
 
 	i16 left_key_is_down = GetAsyncKeyState(VK_LEFT) | GetAsyncKeyState('A');
@@ -410,7 +495,7 @@ process_player_input(void)
 	down_key_was_down = down_key_is_down;
 }
 
-internal void 
+internal void
 render_frame_graphics(void)
 {
 #ifdef SIMD
@@ -422,35 +507,37 @@ render_frame_graphics(void)
 
 	clear_screen(&pixel);
 #endif
-	i32 screen_x  = g_player.x;
+	/*i32 screen_x = g_player.x;
 	i32 screen_y = g_player.y;
 
-	i32 start_pixel = 
+	i32 start_pixel =
 		((GAME_RES_WIDTH * GAME_RES_HEIGHT) - GAME_RES_WIDTH) - (GAME_RES_WIDTH * screen_y) + screen_x;
 
 	for (i32 y = 0; y < 16; ++y)
 	{
 		for (i32 x = 0; x < 16; ++x)
 		{
-			memset((pixel32_t*)g_back_buffer.memory + (uintptr_t)start_pixel 
+			memset((pixel32_t*)g_back_buffer.memory + (uintptr_t)start_pixel
 				+ x - ((uintptr_t)GAME_RES_WIDTH * y), 0xFF, sizeof(pixel32_t));
 		}
-	}
+	}*/
+
+	blit_32bpp_bitmap_to_buffer(&g_player.sprite[SUIT_0][FACING_DOWN_0], g_player.x, g_player.y);
 
 	HDC device_context = GetDC(g_game_window);
 
-	StretchDIBits(device_context, 
-		0, 
-		0, 
+	StretchDIBits(device_context,
+		0,
+		0,
 		g_performance_data.monitor_width,
 		g_performance_data.monitor_height,
-		0, 
-		0, 
-		GAME_RES_WIDTH, 
+		0,
+		0,
+		GAME_RES_WIDTH,
 		GAME_RES_HEIGHT,
-		g_back_buffer.memory, 
-		&g_back_buffer.bitmap_info, 
-		DIB_RGB_COLORS, 
+		g_back_buffer.memory,
+		&g_back_buffer.bitmap_info,
+		DIB_RGB_COLORS,
 		SRCCOPY);
 
 	// Text may flicker on different systems, kinda sucks but oh well
@@ -468,16 +555,16 @@ render_frame_graphics(void)
 
 	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "MCPF: %d", g_performance_data.mcpf);
 	TextOutA(device_context, 0, 16, debug_text_buffer, (int)strlen(debug_text_buffer));
-	
-	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "Min timer res: %.02f", 
+
+	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "Min timer res: %.02f",
 		g_performance_data.minimum_timer_resolution / 10000.f);
 	TextOutA(device_context, 0, 32, debug_text_buffer, (int)strlen(debug_text_buffer));
 
-	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "Max timer res: %.02f", 
+	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "Max timer res: %.02f",
 		g_performance_data.maximum_timer_resolution / 10000.f);
 	TextOutA(device_context, 0, 48, debug_text_buffer, (int)strlen(debug_text_buffer));
 
-	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "Current timer res: %.02f", 
+	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "Current timer res: %.02f",
 		g_performance_data.current_timer_resolution / 10000.f);
 	TextOutA(device_context, 0, 64, debug_text_buffer, (int)strlen(debug_text_buffer));
 
@@ -485,7 +572,7 @@ render_frame_graphics(void)
 		g_performance_data.handle_count);
 	TextOutA(device_context, 0, 80, debug_text_buffer, (int)strlen(debug_text_buffer));
 
-	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "Memory: %lu KB",
+	sprintf_s(debug_text_buffer, sizeof(debug_text_buffer), "Memory: %llu KB",
 		g_performance_data.mem_info.PrivateUsage / 1024);
 	TextOutA(device_context, 0, 96, debug_text_buffer, (int)strlen(debug_text_buffer));
 
@@ -494,6 +581,155 @@ render_frame_graphics(void)
 	TextOutA(device_context, 0, 112, debug_text_buffer, (int)strlen(debug_text_buffer));
 
 	ReleaseDC(g_game_window, device_context);
+}
+
+internal DWORD
+load_32_bitpp_bitmap_from_file(_In_ char* file_name, _Inout_ game_bitmap_t* game_bit_map)
+{
+	DWORD error = ERROR_SUCCESS;
+
+	HANDLE file_handle = INVALID_HANDLE_VALUE;
+
+	WORD bitmap_header = 0;
+
+	DWORD pixel_data_offset = 0;
+
+	DWORD number_of_bytes_read = 2;
+
+	if ((file_handle = CreateFileA(file_name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL)) == INVALID_HANDLE_VALUE)
+	{
+		error = GetLastError();
+
+		goto Exit;
+	}
+
+	// Read two first two bytes of the file to confirm the file is BM
+	if (ReadFile(file_handle, &bitmap_header, 2, &number_of_bytes_read, NULL) == NULL)
+	{
+		error = GetLastError();
+
+		goto Exit;
+	}
+
+	if (bitmap_header != 0x4d42) // "BM" backwards
+	{
+		error = ERROR_FILE_INVALID;
+
+		goto Exit;
+	}
+
+	if (SetFilePointer(file_handle, 0xA, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
+	{
+		error = GetLastError();
+
+		goto Exit;
+	}
+
+	if (ReadFile(file_handle, &pixel_data_offset, sizeof(DWORD), &number_of_bytes_read, NULL) == NULL)
+	{
+		error = GetLastError();
+
+		goto Exit;
+	}
+
+	if (SetFilePointer(file_handle, 0xE, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
+	{
+		error = GetLastError();
+
+		goto Exit;
+	}
+
+	if (ReadFile(file_handle, &game_bit_map->bitmap_info.bmiHeader, sizeof(BITMAPINFOHEADER), &number_of_bytes_read, NULL) == NULL)
+	{
+		error = GetLastError();
+
+		goto Exit;
+	}
+
+	if ((game_bit_map->memory = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, game_bit_map->bitmap_info.bmiHeader.biSizeImage)) == NULL)
+	{
+		error = STATUS_NO_MEMORY;
+
+		goto Exit;
+	}
+
+	if (SetFilePointer(file_handle, pixel_data_offset, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
+	{
+		error = GetLastError();
+
+		goto Exit;
+	}
+
+	if (ReadFile(file_handle, game_bit_map->memory, game_bit_map->bitmap_info.bmiHeader.biSizeImage, &number_of_bytes_read, NULL) == NULL)
+	{
+		error = GetLastError();
+
+		goto Exit;
+	}
+
+Exit:
+
+	if (file_handle && (file_handle != INVALID_HANDLE_VALUE))
+		CloseHandle(file_handle);
+
+	return error;
+}
+
+internal DWORD 
+initalize_player(void)
+{
+	DWORD error = ERROR_SUCCESS;
+
+	g_player.x = 25;
+	g_player.y = 25;
+
+	if ((error = load_32_bitpp_bitmap_from_file("E:\\coding\\nivr\\dev\\VSProjects\\win32_game\\Assets\\Hero_Suit0_Down_Standing.bmpx",
+		&g_player.sprite[SUIT_0][FACING_DOWN_0])) != ERROR_SUCCESS)
+	{
+		MessageBoxA(NULL, "Failed to load bitmap!", "Error!",
+			MB_ICONEXCLAMATION | MB_OK);
+
+		goto Exit;
+	}
+
+
+Exit:
+
+	return error;
+}
+
+internal void 
+blit_32bpp_bitmap_to_buffer(_In_ game_bitmap_t* game_bit_map,_In_ u16 x,_In_ u16 y)
+{
+	i32 starting_screen_pixel = ((GAME_RES_WIDTH * GAME_RES_HEIGHT) - GAME_RES_WIDTH) - (GAME_RES_WIDTH * y) + x;
+
+	i32 starting_bitmap_pixel = 
+		(game_bit_map->bitmap_info.bmiHeader.biWidth * game_bit_map->bitmap_info.bmiHeader.biHeight) - 
+		(game_bit_map->bitmap_info.bmiHeader.biWidth);
+
+	i32 memory_offset = 0;
+
+	i32 bitmap_offset = 0;
+
+	pixel32_t bitmap_pixel = { 0 };
+	
+	pixel32_t background_pixel = { 0 };
+
+	for (i16 y_pixel = 0; y_pixel < game_bit_map->bitmap_info.bmiHeader.biHeight; ++y_pixel)
+	{
+		for (i16 x_pixel = 0; x_pixel < game_bit_map->bitmap_info.bmiHeader.biWidth; ++x_pixel)
+		{
+			memory_offset = starting_screen_pixel + x_pixel - (GAME_RES_WIDTH * y_pixel);
+			bitmap_offset = starting_bitmap_pixel + x_pixel - (game_bit_map->bitmap_info.bmiHeader.biWidth * y_pixel);
+
+			memcpy_s(&bitmap_pixel, sizeof(pixel32_t), (pixel32_t*)game_bit_map->memory + bitmap_offset, sizeof(pixel32_t));
+
+			if (bitmap_pixel.alpha == 255)
+			{
+				memcpy_s((pixel32_t*)g_back_buffer.memory + memory_offset, sizeof(pixel32_t), &bitmap_pixel, sizeof(pixel32_t));
+			}
+		}
+	}
 }
 
 #ifdef SIMD
