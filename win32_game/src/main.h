@@ -8,7 +8,7 @@
 #define GAME_DRAWING_AREA_MEMORY_SIZE ((GAME_RES_WIDTH * GAME_RES_HEIGHT) * (GAME_BPP / 8))
 
 // 16.67 milliseconds is 60 frames per second.
-#define TARGET_MICROSECONDS_PER_FRAME 16667ULL
+#define TARGET_MICROSECONDS_PER_FRAME 16667ULL // Not used but will keep 
 
 #define SIMD
 
@@ -54,6 +54,14 @@
 #define FACING_UP_1		10
 
 #define FACING_UP_2		11
+
+#define DIRECTION_DOWN		0
+
+#define DIRECTION_LEFT		1
+
+#define DIRECTION_RIGHT		2
+
+#define DIRECTION_UP		3
 
 typedef LONG(NTAPI* _NtTimerResolution) (OUT PULONG MinimalResolution, OUT PULONG MaximumResolution, OUT PULONG CurrentResolution);
 typedef	NTSYSAPI NTSTATUS (NTAPI* _NtSetTimerResolution) (IN ULONG DesiredResolution, IN BOOLEAN SetResolution, OUT PULONG CurrentResolution);
@@ -101,6 +109,11 @@ typedef struct PLAYER_STRUCT {
 	char name[12];
 	game_bitmap_t sprite[3][12];
 	i32 x, y;
+	i32 speed;
+	u8 movement_remaining;
+	u8 current_suit;
+	u8 sprite_index;
+	u8 direction;
 	i32 health;
 } player_t;
 

@@ -39,6 +39,7 @@ global_variable player_t g_player;
 global_variable  BOOL g_window_has_focus;
 
 global_variable i64 g_perf_counter_frequency;
+global_variable i64 g_rendered_frames;
 
 inline LARGE_INTEGER 
 get_wall_clock(void)
@@ -223,8 +224,6 @@ int CALLBACK WinMain(
 
 		render_frame_graphics();
 
-
-
 		i32 ms_per_frame = (i32)((1000 * counter_elapsed) / g_perf_counter_frequency);
 
 		g_performance_data.fps = (i32)(g_perf_counter_frequency / counter_elapsed);
@@ -261,6 +260,7 @@ int CALLBACK WinMain(
 		}
 
 		g_performance_data.total_frames_rendered++;
+		g_rendered_frames = g_performance_data.total_frames_rendered;
 
 		char buffer[256] = { 0 };
 		
@@ -471,8 +471,6 @@ process_player_input(void)
 	i16 up_key_is_down = GetAsyncKeyState(VK_UP) | GetAsyncKeyState('W');
 	i16 down_key_is_down = GetAsyncKeyState(VK_DOWN) | GetAsyncKeyState('S');
 
-	static i16 debug_key_was_down;
-
 	static i16 left_key_was_down;
 	static i16 right_key_was_down;
 	static i16 up_key_was_down;
@@ -483,28 +481,109 @@ process_player_input(void)
 		SendMessageA(g_game_window, WM_CLOSE, 0, 0);
 	}
 
+	/*if (!down_key_is_down)
+	{
+		if (g_player.y <= GAME_RES_HEIGHT - 16)
+		{
+			g_player.direction = DIRECTION_DOWN;
+		}
+	}
+	else
+	{
+		if (g_player.direction == DIRECTION_DOWN)
+		{
+			g_player.y++;
+		}
+	}
+
+	if (!left_key_is_down)
+	{
+		if (g_player.x >= 0)
+		{
+			g_player.direction = DIRECTION_LEFT;
+		}
+	}
+	else
+	{
+		if (g_player.direction == DIRECTION_LEFT)
+		{
+			g_player.x--;
+		}
+	}
+
+	if (!right_key_is_down)
+	{
+		if (g_player.x <= GAME_RES_WIDTH - 16)
+		{
+			g_player.direction = DIRECTION_RIGHT;
+		}
+	}
+	else
+	{
+		if (g_player.direction == DIRECTION_RIGHT)
+		{
+			g_player.x++;
+		}
+	}
+
+	if (!up_key_is_down)
+	{
+		if (g_player.x >= 0)
+		{
+			g_player.direction = DIRECTION_UP;
+		}
+	}
+	else
+	{
+		if (g_player.direction == DIRECTION_UP)
+		{
+			g_player.y--;
+		}
+	}*/
+
+	if (down_key_is_down)
+	{
+		g_player.direction = DIRECTION_DOWN;
+
+		if (g_player.y <= GAME_RES_HEIGHT - 16)
+			g_player.y += g_player.speed;
+
+		if ((g_rendered_frames % 5) == 0)
+		{
+			g_player.sprite_index++;
+
+			if (g_player.sprite_index > 2)
+				g_player.sprite_index = 0;
+		}
+	}
+	else
+	{
+		g_player.sprite_index = 0;
+	}
+
 	if (left_key_is_down)
 	{
-		if (g_player.x > 0)
-			g_player.x--;
+		g_player.direction = DIRECTION_LEFT;
+
+		if (g_player.x >= 0)
+			g_player.x -= g_player.speed;
 	}
 
 	if (right_key_is_down)
 	{
-		if (g_player.x < GAME_RES_WIDTH - 16)
-			g_player.x++;
+		g_player.direction = DIRECTION_RIGHT;
+
+		if (g_player.x <= GAME_RES_WIDTH - 16)
+			g_player.x += g_player.speed;
 	}
 
 	if (up_key_is_down)
 	{
-		if (g_player.y > 0)
-			g_player.y--;
-	}
+		g_player.direction = DIRECTION_UP;
 
-	if (down_key_is_down)
-	{
-		if (g_player.y < GAME_RES_HEIGHT - 16)
-			g_player.y++;
+		if (g_player.y >= 0)
+			g_player.y -= g_player.speed;
+
 	}
 
 	left_key_was_down = left_key_is_down;
@@ -525,22 +604,8 @@ render_frame_graphics(void)
 
 	clear_screen(&pixel);
 #endif
-	/*i32 screen_x = g_player.x;
-	i32 screen_y = g_player.y;
 
-	i32 start_pixel =
-		((GAME_RES_WIDTH * GAME_RES_HEIGHT) - GAME_RES_WIDTH) - (GAME_RES_WIDTH * screen_y) + screen_x;
-
-	for (i32 y = 0; y < 16; ++y)
-	{
-		for (i32 x = 0; x < 16; ++x)
-		{
-			memset((pixel32_t*)g_back_buffer.memory + (uintptr_t)start_pixel
-				+ x - ((uintptr_t)GAME_RES_WIDTH * y), 0xFF, sizeof(pixel32_t));
-		}
-	}*/
-
-	blit_32bpp_bitmap_to_buffer(&g_player.sprite[SUIT_0][FACING_DOWN_0], g_player.x, g_player.y);
+	blit_32bpp_bitmap_to_buffer(&g_player.sprite[g_player.current_suit][g_player.direction + g_player.sprite_index], g_player.x, g_player.y);
 
 	HDC device_context = GetDC(g_game_window);
 
@@ -700,8 +765,14 @@ initalize_player(void)
 
 	g_player.x = 25;
 	g_player.y = 25;
+	g_player.current_suit = SUIT_0;
+	g_player.speed = 2;
+	g_player.direction = DIRECTION_DOWN;
+	g_player.direction = 0;
+	g_player.movement_remaining = 0;
 
-	if ((error = load_32_bitpp_bitmap_from_file(".\\Assets\\soldier_standing.bmpx", &g_player.sprite[SUIT_0][FACING_DOWN_0])) != ERROR_SUCCESS)
+	if ((error = load_32_bitpp_bitmap_from_file
+	("E:\\coding\\nivr\\dev\\VSProjects\\win32_game\\Assets\\soldier_standing.bmpx", &g_player.sprite[SUIT_0][FACING_DOWN_0])) != ERROR_SUCCESS)
 	{
 		MessageBoxA(NULL, "Failed to load bitmap!", "Error!",
 			MB_ICONEXCLAMATION | MB_OK);
@@ -709,7 +780,8 @@ initalize_player(void)
 		goto Exit;
 	}
 
-	if ((error = load_32_bitpp_bitmap_from_file(".\\Assets\\soldier_walking_0.bmpx", &g_player.sprite[SUIT_1][FACING_DOWN_1])) != ERROR_SUCCESS)
+	if ((error = load_32_bitpp_bitmap_from_file
+	("E:\\coding\\nivr\\dev\\VSProjects\\win32_game\\Assets\\soldier_walking_0.bmpx", &g_player.sprite[SUIT_0][FACING_DOWN_1])) != ERROR_SUCCESS)
 	{
 		MessageBoxA(NULL, "Failed to load bitmap!", "Error!",
 			MB_ICONEXCLAMATION | MB_OK);
@@ -717,7 +789,8 @@ initalize_player(void)
 		goto Exit;
 	}
 
-	if ((error = load_32_bitpp_bitmap_from_file(".\\Assets\\soldier_walking_1.bmpx", &g_player.sprite[SUIT_2][FACING_DOWN_0])) != ERROR_SUCCESS)
+	if ((error = load_32_bitpp_bitmap_from_file
+	("E:\\coding\\nivr\\dev\\VSProjects\\win32_game\\Assets\\soldier_walking_1.bmpx", &g_player.sprite[SUIT_0][FACING_DOWN_2])) != ERROR_SUCCESS)
 	{
 		MessageBoxA(NULL, "Failed to load bitmap!", "Error!",
 			MB_ICONEXCLAMATION | MB_OK);
