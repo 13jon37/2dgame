@@ -1,4 +1,4 @@
-![Screenshot](game.PNG)
+![Screenshot](screenshot.PNG)
 
 * BIG thanks to Casey Muratori (Handmade Hero) - (https://handmadehero.org/) &
 * Ryan Ries on YouTube!!!!
