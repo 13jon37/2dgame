@@ -25,42 +25,24 @@
 // Disable pixel32_t* cast warning
 #pragma warning(disable: 4133)
 
-#define SUIT_0 0
-
-#define SUIT_1 1
-
-#define SUIT_2 2
-
-#define FACING_DOWN_0	0
-
-#define FACING_DOWN_1	1
-
-#define FACING_DOWN_2	2
-
-#define FACING_LEFT_0	3
-
-#define FACING_LEFT_1	4
-
-#define FACING_LEFT_2	5
-
-#define FACING_RIGHT_0	6
-
-#define FACING_RIGHT_1	7
-
-#define FACING_RIGHT_2	8
-
-#define FACING_UP_0		9
-
-#define FACING_UP_1		10
-
-#define FACING_UP_2		11
-
+#define SUIT_0				0
+#define SUIT_1				1
+#define SUIT_2				2
+#define FACING_DOWN_0		0
+#define FACING_DOWN_1		1
+#define FACING_DOWN_2		2
+#define FACING_LEFT_0		3
+#define FACING_LEFT_1		4
+#define FACING_LEFT_2		5
+#define FACING_RIGHT_0		6
+#define FACING_RIGHT_1		7
+#define FACING_RIGHT_2		8
+#define FACING_UP_0			9
+#define FACING_UP_1			10
+#define FACING_UP_2			11
 #define DIRECTION_DOWN		0
-
 #define DIRECTION_LEFT		1
-
 #define DIRECTION_RIGHT		2
-
 #define DIRECTION_UP		3
 
 typedef LONG(NTAPI* _NtTimerResolution) (OUT PULONG MinimalResolution, OUT PULONG MaximumResolution, OUT PULONG CurrentResolution);
@@ -117,29 +99,14 @@ typedef struct PLAYER_STRUCT {
 	i32 health;
 } player_t;
 
-internal LRESULT
-CALLBACK main_window_proc(_In_ HWND window_handle, _In_ UINT message, _In_ WPARAM w_param, _In_ LPARAM l_param);
-
-internal DWORD
-create_main_game_window(void);
-
-internal BOOL
-game_is_running(void);
-
-internal void
-process_player_input(void);
-
-internal void
-render_frame_graphics(void);
-
-internal DWORD 
-load_32_bitpp_bitmap_from_file(_In_ char* file_name, _Inout_ game_bitmap_t* game_bit_map);
-
-internal DWORD
-initalize_player(void);
-
-internal void
-blit_32bpp_bitmap_to_buffer(_In_ game_bitmap_t* game_bit_map, _In_ u16 x, _In_ u16 y);
+internal LRESULT CALLBACK main_window_proc(_In_ HWND window_handle, _In_ UINT message, _In_ WPARAM w_param, _In_ LPARAM l_param);
+internal DWORD create_main_game_window(void);
+internal BOOL game_is_running(void);
+internal void process_player_input(void);
+internal void render_frame_graphics(void);
+internal DWORD load_32_bitpp_bitmap_from_file(_In_ char* file_name, _Inout_ game_bitmap_t* game_bit_map);
+internal DWORD initalize_player(void);
+internal void blit_32bpp_bitmap_to_buffer(_In_ game_bitmap_t* game_bit_map, _In_ u16 x, _In_ u16 y);
 
 #ifdef SIMD
 __forceinline
